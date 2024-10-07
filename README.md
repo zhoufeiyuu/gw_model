@@ -6,6 +6,7 @@
 之后
 python use.py 使用模型  
 使用示例：  
-![Uploading image.png…]()
+<img width="262" alt="image" src="https://github.com/user-attachments/assets/bb23a8e0-ade3-4fab-9bb8-ce65db11a397">
+
 
 
