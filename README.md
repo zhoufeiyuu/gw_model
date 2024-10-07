@@ -5,3 +5,4 @@
 python train.py 训练模型
 之后
 python use.py 使用
+<img width="334" alt="image" src="https://github.com/user-attachments/assets/c9276ff9-adcf-49b1-883d-b880455b20aa">
