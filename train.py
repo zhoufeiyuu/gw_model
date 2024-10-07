@@ -1,73 +1,39 @@
-from transformers import AutoTokenizer, AutoModelForTokenClassification, Trainer, TrainingArguments,AutoModelForMaskedLM
-from torch.utils.data import DataLoader
-import datasets
+from transformers import AutoTokenizer, AutoModelForTokenClassification
+import torch
+model_path = "./punctuation_model"
+tokenizer = AutoTokenizer.from_pretrained(model_path)
+model = AutoModelForTokenClassification.from_pretrained(model_path)
+model.eval()
+print("输入 结束 程序结束")
+while True:
+    text = input("输入句子:")
+    if text == "结束":
+        break
 
-datas = datasets.load_dataset("punctuation.py", trust_remote_code=True)
 
-train_data_tokens = datas['train']['tokens'][:-1]  # 取出所有 tokens，去掉最后一个
-train_data_segs = datas['train']['seg_tags'][:-1]  # 取出所有标签，去掉最后一个
-test_data_tokens = datas['test']['tokens']
-test_data_segs = datas['test']['seg_tags']
+    inputs = tokenizer(list(text), is_split_into_words=True, max_length = 128,return_tensors="pt", truncation=True, padding=True)
 
-#由于条件原因，我是把模型本地下载使用，如果跑不动，我可以提供自己本地下载的模型，然后使用我注释的 tokenizer model
-#tokenizer = AutoTokenizer.from_pretrained("bert-ancient-chinese")
-#model = AutoModelForTokenClassification.from_pretrained("bert-ancient-chinese")  # 'O', 'B'
+    with torch.no_grad():
+        outputs = model(**inputs)
 
-tokenizer = AutoTokenizer.from_pretrained("Jihuai/bert-ancient-chinese")
-model = AutoModelForMaskedLM.from_pretrained("Jihuai/bert-ancient-chinese")
+# 获取预测结果
+    logits = outputs.logits
+    predictions = torch.argmax(logits, dim=2)
 
-def tokenize_and_align_labels(tokens, seg_tags):
-    tokenized_inputs = tokenizer(tokens, truncation=True, padding=True, max_length=128, is_split_into_words=True)
+    tokens = inputs.tokens()
+    id2label = {0: 'O', 1: 'B'}
+    predicted_labels = [id2label[pred.item()] for pred in predictions[0]]
 
-    labels = []
-    for i, label in enumerate(seg_tags):
-        word_ids = tokenized_inputs.word_ids(batch_index=i)
-        label_ids = []
-        previous_word_idx = None
-        for word_idx in word_ids:
-            if word_idx is None:
-                label_ids.append(-100)  # 忽略此 token
-            elif word_idx != previous_word_idx:
-                label_ids.append(int(label[word_idx]))  # 使用断句标签
-            else:
-                label_ids.append(-100)  # 对子词进行跳过
-            previous_word_idx = word_idx
-        labels.append(label_ids)
 
-    tokenized_inputs["labels"] = labels
-    return tokenized_inputs
+    tokens = tokens[1:-1]
+    predicted_labels = predicted_labels[1:-1]
 
-# 对训练集和测试集进行tokenize
-train_tokenized = tokenize_and_align_labels(train_data_tokens, train_data_segs)
-test_tokenized = tokenize_and_align_labels(test_data_tokens, test_data_segs)
+    segmented_text = ""
+    for token, label in zip(tokens, predicted_labels):
+        segmented_text += token
+        if label == 'B':
+            segmented_text += ' '
 
-# 转换为Dataset格式
-train_dataset = datasets.Dataset.from_dict(train_tokenized)
-test_dataset = datasets.Dataset.from_dict(test_tokenized)
-
-# 设置训练参数
-training_args = TrainingArguments(
-    output_dir="./results",
-    eval_strategy="epoch",  # 每个 epoch 进行评估
-    save_strategy="epoch", 
-    learning_rate=2e-5,           # 学习率
-    per_device_train_batch_size=8,  # 训练批量大小
-    per_device_eval_batch_size=8,   # 评估批量大小
-    num_train_epochs=1,             # 训练 epoch 数
-    weight_decay=0.01,              # 权重衰减
-)
-
-# 使用Trainer进行训练
-trainer = Trainer(
-    model=model,
-    args=training_args,
-    train_dataset=train_dataset,
-    eval_dataset=test_dataset,
-)
-
-trainer.train()
-
-# 保存训练好的模型
-trainer.save_model("./punctuation_model")
-tokenizer.save_pretrained("./punctuation_model")
-print("over")
+# 输出断句后的文本
+    print("断句后:",segmented_text)
+    #print(segmented_text)
